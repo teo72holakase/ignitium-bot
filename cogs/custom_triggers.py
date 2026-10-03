@@ -36,8 +36,10 @@ class CustomTriggers(commands.Cog):
         if self.bot.tree.get_command(name):
             return  # ya existe, evitamos duplicados
 
-        async def callback(interaction: discord.Interaction, _response=response):
-            await interaction.response.send_message(_response)
+        # `response` queda capturada por el closure (no como parámetro: discord.py
+        # tomaría cualquier argumento extra como parámetro del slash command)
+        async def callback(interaction: discord.Interaction):
+            await interaction.response.send_message(response)
 
         command = app_commands.Command(name=name, description=description, callback=callback)
         self.bot.tree.add_command(command)
