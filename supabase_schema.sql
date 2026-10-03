@@ -11,8 +11,16 @@ create table if not exists guild_config (
     ticket_log_channel_id bigint,
     join_role_ids bigint[] default '{}',
     antispam_enabled boolean default true,
-    honeypot_channel_id bigint
+    honeypot_channel_id bigint,
+    member_counter_channel_id bigint,
+    member_role_id bigint,
+    member_counter_label text
 );
+
+-- For databases created with an older version of this schema
+alter table guild_config add column if not exists member_counter_channel_id bigint;
+alter table guild_config add column if not exists member_role_id bigint;
+alter table guild_config add column if not exists member_counter_label text;
 
 -- Ticket panels (there can be several, e.g. "Support", "Report a player")
 create table if not exists ticket_panels (

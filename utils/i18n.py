@@ -61,7 +61,12 @@ MESSAGES = {
         "✅ Canal contador creado: {channel}\nSe actualiza solo cada {minutes} minutos (límite propio de Discord para renombrar canales).",
         "✅ Canal contador criado: {channel}\nEle é atualizado sozinho a cada {minutes} minutos (limite do próprio Discord para renomear canais).",
     ),
-    "counter_name": ("👥 Members: {count}", "👥 Miembros: {count}", "👥 Membros: {count}"),
+    "counter_label": ("👥 Members", "👥 Miembros", "👥 Membros"),
+    "counter_updated": (
+        "✅ Counter updated: {channel}\nIt now shows: **{name}**",
+        "✅ Contador actualizado: {channel}\nAhora muestra: **{name}**",
+        "✅ Contador atualizado: {channel}\nAgora mostra: **{name}**",
+    ),
     "help_title": ("📖 Ingnitium Help", "📖 Ayuda de Ingnitium", "📖 Ajuda do Ingnitium"),
     "help_desc": (
         "Commands grouped by module. Type `/` in chat to see each one's description.",
@@ -453,9 +458,17 @@ def tr(ctx, key: str, **kwargs) -> str:
 DESCRIPTIONS = {
     # general
     "Shows the bot's latency": ("Muestra la latencia del bot", "Mostra a latência do bot"),
-    "Creates a voice channel that shows the member count in its name": (
-        "Crea un canal de voz que muestra la cantidad de miembros en su nombre",
-        "Cria um canal de voz que mostra a quantidade de membros no nome",
+    "Creates or updates the member counter voice channel": (
+        "Crea o actualiza el canal de voz contador de miembros",
+        "Cria ou atualiza o canal de voz contador de membros",
+    ),
+    "Role whose members are counted (default: all members)": (
+        "Rol cuyos miembros se cuentan (por defecto: todos los miembros)",
+        "Cargo cujos membros são contados (padrão: todos os membros)",
+    ),
+    "Text shown before the number, e.g. Players (default: Members)": (
+        "Texto que va antes del número, ej: Jugadores (por defecto: Miembros)",
+        "Texto exibido antes do número, ex: Jogadores (padrão: Membros)",
     ),
     "Category to create the channel in (optional)": (
         "Categoría donde crear el canal (opcional)",

@@ -5,8 +5,26 @@ from discord.ext import commands, tasks
 from utils.db import supabase, get_guild_config, update_guild_config, run_query
 from utils.i18n import L, tr
 
-MIEMBRO_ROLE_ID = 1521700111518924881
 COUNTER_UPDATE_MINUTES = 10  # Discord limita renombrar canales ~2 veces cada 10 min
+
+
+def count_members(guild: discord.Guild, config: dict) -> int:
+    """
+    Cantidad para el contador: miembros del rol guardado en Supabase
+    (guild_config.member_role_id) o, si no hay rol (o ya no existe), todos los miembros.
+    """
+    role_id = config.get("member_role_id")
+    if role_id:
+        role = guild.get_role(int(role_id))
+        if role:
+            return len(role.members)
+    return guild.member_count or 0
+
+
+def counter_name(guild: discord.Guild, config: dict) -> str:
+    """Nombre del canal: '<texto>: <cantidad>'. El texto es personalizable (por defecto '👥 Members')."""
+    label = (config.get("member_counter_label") or "").strip() or tr(guild, "counter_label")
+    return f"{label}: {count_members(guild, config)}"[:100]
 
 
 class General(commands.Cog):
@@ -21,9 +39,19 @@ class General(commands.Cog):
     async def ping(self, interaction: discord.Interaction):
         await interaction.response.send_message(tr(interaction, "ping", ms=round(self.bot.latency * 1000)))
 
-    @app_commands.command(name="counter-setup", description=L("Creates a voice channel that shows the member count in its name"))
-    @app_commands.describe(category=L("Category to create the channel in (optional)"))
-    async def contador_setup(self, interaction: discord.Interaction, category: discord.CategoryChannel = None):
+    @app_commands.command(name="counter-setup", description=L("Creates or updates the member counter voice channel"))
+    @app_commands.describe(
+        role=L("Role whose members are counted (default: all members)"),
+        text=L("Text shown before the number, e.g. Players (default: Members)"),
+        category=L("Category to create the channel in (optional)"),
+    )
+    async def contador_setup(
+        self,
+        interaction: discord.Interaction,
+        role: discord.Role = None,
+        text: app_commands.Range[str, 1, 60] = None,
+        category: discord.CategoryChannel = None,
+    ):
         if not isinstance(interaction.user, discord.Member) or not interaction.user.guild_permissions.manage_guild:
             await interaction.response.send_message(tr(interaction, "no_manage_guild"), ephemeral=True)
             return
@@ -31,20 +59,47 @@ class General(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
 
-        role = guild.get_role(MIEMBRO_ROLE_ID)
-        count = len(role.members) if role else 0
+        config = await run_query(lambda: get_guild_config(guild.id))
+
+        # Solo se guarda lo que se indicó; lo demás conserva su valor anterior
+        changes = {}
+        if role is not None:
+            changes["member_role_id"] = role.id
+        if text is not None:
+            changes["member_counter_label"] = text.strip()
+        if changes:
+            await run_query(lambda: update_guild_config(guild.id, **changes))
+            config = {**config, **changes}
+
+        name = counter_name(guild, config)
+
+        # Si ya existe un contador, se actualiza en vez de crear uno duplicado
+        existing = guild.get_channel(config["member_counter_channel_id"]) if config.get("member_counter_channel_id") else None
+        if existing:
+            try:
+                await existing.edit(
+                    name=name,
+                    **({"category": category} if category else {}),
+                    reason=f"Member counter updated by {interaction.user}",
+                )
+            except discord.HTTPException:
+                pass  # rate limit de renombrado; el ciclo automático lo reintenta
+            await interaction.followup.send(
+                tr(interaction, "counter_updated", channel=existing.mention, name=name), ephemeral=True
+            )
+            return
 
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(connect=False, view_channel=True),
         }
         channel = await guild.create_voice_channel(
-            name=tr(guild, "counter_name", count=count),
+            name=name,
             category=category,
             overwrites=overwrites,
             reason=f"Member counter channel created by {interaction.user}"
         )
 
-        update_guild_config(guild.id, member_counter_channel_id=channel.id)
+        await run_query(lambda: update_guild_config(guild.id, member_counter_channel_id=channel.id))
 
         await interaction.followup.send(
             tr(interaction, "counter_created", channel=channel.mention, minutes=COUNTER_UPDATE_MINUTES),
@@ -56,7 +111,7 @@ class General(commands.Cog):
         for guild in self.bot.guilds:
             try:
                 config = await run_query(
-                    lambda: supabase.table("guild_config").select("member_counter_channel_id").eq("guild_id", guild.id).execute()
+                    lambda: supabase.table("guild_config").select("member_counter_channel_id, member_role_id, member_counter_label").eq("guild_id", guild.id).execute()
                 )
             except Exception:
                 continue
@@ -72,9 +127,7 @@ class General(commands.Cog):
             if not channel:
                 continue
 
-            role = guild.get_role(MIEMBRO_ROLE_ID)
-            count = len(role.members) if role else 0
-            nuevo_nombre = tr(guild, "counter_name", count=count)
+            nuevo_nombre = counter_name(guild, config.data[0])
 
             if channel.name != nuevo_nombre:
                 try:
